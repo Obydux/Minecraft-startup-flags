@@ -1,3 +1,6 @@
+[![](https://img.shields.io/discord/1383468620566237234)](https://discord.gg/sQ6VmWDzN3)
+[![](https://img.shields.io/github/sponsors/Obydux)](https://github.com/sponsors/Obydux)
+
 # Modern way of optimizing garbage collection in Minecraft: Java Edition
 
 ## Introduction
