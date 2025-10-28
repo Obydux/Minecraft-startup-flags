@@ -34,8 +34,14 @@ As previously said, Generational ZGC was only added in Java 21. Minecraft requir
 
 Enabling Generational ZGC is very straightforward. Just add `-XX:+UseZGC -XX:+ZGenerational` to your Java arguments either in your Minecraft client or your server’s start-up script in between `java` and `-jar`. If you are running Java 23 or above the `XX:+ZGenerational` is not needed anymore because it is on by default.
 
+### When (and When Not) to use ZGC
+Refrain from using ZGC on servers with less than 2 GB of RAM. ZGC performs best on systems with at least 4 cores, and 6-8 GB of memory available. With any less, G1GC may perform better due to lower overhead.
+
 ## Tuning Generational ZGC
 ZGC has been designed to be adaptive and to require minimal manual configuration. During the execution of the Java program, ZGC dynamically adapts to the workload by resizing generations, scaling the number of GC threads, and adjusting tenuring thresholds. Because of this many arguments used to tune G1GC, like `-XX:ConcGCThreads=`, either do not work with ZGC or do not provide any benefits.  But there are still things you need to consider when using it.
+
+### Avoid Mixing G1GC Flags
+It is important to refrain from mixing G1GC flags. "[Aikar's flags](https://docs.papermc.io/paper/aikars-flags/)" and other common community presets for G1GC shouldn't be used with ZGC. These flags were not designed for ZGC's dynamic behavior, and were meant for region-based collectors, which could result into interference. 
 
 ###	Setting the maximum heap size
 The most important tuning option for ZGC is setting the maximum heap size, essentially a limit of how much memory the JVM can use. This is done with the `-Xmx={memory}M` where `{memory}` is the amount of RAM you want to allocate to your Minecraft instance in megabytes. Because ZGC is a concurrent collector, you must select a maximum heap size such that the heap can accommodate the live-set of your application and there is enough headroom in the heap to allow allocations to be serviced while the GC is running. This means you should not set the maximum heap size to entire amount of memory available on your system.
@@ -50,6 +56,9 @@ Not only uncommitting but also committing memory has a negative impact on the la
 ZGC has NUMA support, which means it will try its best to direct Java heap allocations to NUMA-local memory. NUMA stands for Non-Uniform Memory Access and refers to the architecture design used in multi-socket systems. In NUMA systems, memory is divided into multiple memory nodes, with each node associated with a specific processor or socket. Each processor has faster access to its own local memory node compared to accessing remote memory nodes.
 
 By default, ZGC enables NUMA support, allowing it to leverage the benefits of NUMA architectures. When running on a NUMA machine (e.g. a multi-socket x86 machine), having NUMA support enabled will often give a noticeable performance boost. However, if the JVM detects that it is bound to use memory on a single NUMA node, NUMA support will be disabled. Even though explicitly enabling NUMA support is possible it will not provide any benefits as some might suggest.
+
+### ZGC in Containers and VMs
+If you are hosting Minecraft in a managed service, such as docker, it is important to match your JVM heap size to the container memory limit. Use `-XX:+UseContainerSupport` (which is enabled in Java 15+ by default) so that the JVM reads your container's cgroup memory allocation correctly.
 
 ## String Deduplication
 String deduplication is a JVM feature that has been around for quite a while now. It helps reduce Java heap memory usage by automatically deduplicating identical character arrays that are backing String objects. In the case of Minecraft, it can slightly help reduce the heap memory usage. It used to only work with G1GC, but in Java 18 a huge chunk of it was rewritten to also support ZGC. It is also more beneficial to use it with ZGC, because it does the string deduplication concurrently. To enable this feature simply add `-XX:+UseStringDeduplication` to your start-up arguments.
