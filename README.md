@@ -35,7 +35,7 @@ As previously said, Generational ZGC was only added in Java 21. Minecraft requir
 Enabling Generational ZGC is very straightforward. Just add `-XX:+UseZGC -XX:+ZGenerational` to your Java arguments either in your Minecraft client or your server’s start-up script in between `java` and `-jar`. If you are running Java 23 or above the `XX:+ZGenerational` is not needed anymore because it is on by default.
 
 ### When (and When Not) to use ZGC
-Refrain from using ZGC on servers with less than 2 GB of RAM. ZGC performs best on systems with at least 4 cores, and 6-8 GB of memory available. With any less, G1GC may perform better due to lower overhead.
+Even though ZGC can technically run on small heaps, it scales best when sufficient CPU parallelism and heap headroom is available. Various community observations and tuning guides note that the best results come on hosts with more than 4 cores and 6-8 GB RAM. Systems that have below 2 GB RAM often see better efficency from G1GC due to lower overhead.
 
 ## Tuning Generational ZGC
 ZGC has been designed to be adaptive and to require minimal manual configuration. During the execution of the Java program, ZGC dynamically adapts to the workload by resizing generations, scaling the number of GC threads, and adjusting tenuring thresholds. Because of this many arguments used to tune G1GC, like `-XX:ConcGCThreads=`, either do not work with ZGC or do not provide any benefits.  But there are still things you need to consider when using it.
