@@ -38,13 +38,10 @@ Enabling Generational ZGC is very straightforward. Just add `-XX:+UseZGC -XX:+ZG
 Even though ZGC can technically run on small heaps, it scales best when sufficient CPU parallelism and heap headroom is available. Various community observations and tuning guides note that the best results come on hosts with more than 4 cores and 6-8 GB RAM. Systems that have below 2 GB RAM often see better efficency from G1GC due to lower overhead.
 
 ## Tuning Generational ZGC
-ZGC has been designed to be adaptive and to require minimal manual configuration. During the execution of the Java program, ZGC dynamically adapts to the workload by resizing generations, scaling the number of GC threads, and adjusting tenuring thresholds. Because of this many arguments used to tune G1GC, like `-XX:ConcGCThreads=`, either do not work with ZGC or do not provide any benefits.  But there are still things you need to consider when using it.
-
-### Avoid Mixing G1GC Flags
-It is important to refrain from mixing G1GC flags. "[Aikar's flags](https://docs.papermc.io/paper/aikars-flags/)" and other common community presets for G1GC shouldn't be used with ZGC. These flags were not designed for ZGC's dynamic behavior, and were meant for region-based collectors, which could result into interference. 
+ZGC has been designed to be adaptive and to require minimal manual configuration. During the execution of the Java program, ZGC dynamically adapts to the workload by resizing generations, scaling the number of GC threads, and adjusting tenuring thresholds. Because of this many arguments used to tune G1GC, like `-XX:ConcGCThreads=`, either do not work with ZGC or do not provide any benefits, which also means you should refrain from mixing [Aikar's flags](https://docs.papermc.io/paper/aikars-flags/) or other common flag presets meant for G1GC with ZGC. But there are still things you need to consider when using it.
 
 ###	Setting the maximum heap size
-The most important tuning option for ZGC is setting the maximum heap size, essentially a limit of how much memory the JVM can use. This is done with the `-Xmx={memory}M` where `{memory}` is the amount of RAM you want to allocate to your Minecraft instance in megabytes. Because ZGC is a concurrent collector, you must select a maximum heap size such that the heap can accommodate the live-set of your application and there is enough headroom in the heap to allow allocations to be serviced while the GC is running. This means you should not set the maximum heap size to entire amount of memory available on your system.
+The most important tuning option for ZGC is setting the maximum heap size, essentially a limit of how much memory the JVM can use. This is done with the `-Xmx={memory}M` where `{memory}` is the amount of RAM you want to allocate to your Minecraft instance in megabytes. Because ZGC is a concurrent collector, you must select a maximum heap size such that the heap can accommodate the live-set of your application and there is enough headroom in the heap to allow allocations to be serviced while the GC is running. This means you should not set the maximum heap size to the entire amount of memory available on your system, or if you are running the server inside Docker, the container memory limit.
 
 ### Returning Unused Memory to the OS
 By default, ZGC uncommits unused memory, returning it to the operating system. This, however, may be undesirable for Minecraft servers because it can have a negative impact on the latency of Java threads. Best way to go about it is by setting your minimum heap size `-Xms` to the same value as your maximum heap size `-Xmx`, which effectively disables this. Some Minecraft server hosting providers make this simply impossible, however. In which case the only other way to achieve similar results is by adding `-XX:-ZUncommit` to your start-up arguments.
@@ -57,13 +54,10 @@ ZGC has NUMA support, which means it will try its best to direct Java heap alloc
 
 By default, ZGC enables NUMA support, allowing it to leverage the benefits of NUMA architectures. When running on a NUMA machine (e.g. a multi-socket x86 machine), having NUMA support enabled will often give a noticeable performance boost. However, if the JVM detects that it is bound to use memory on a single NUMA node, NUMA support will be disabled. Even though explicitly enabling NUMA support is possible it will not provide any benefits as some might suggest.
 
-### ZGC in Containers and VMs
-If you are hosting Minecraft in a managed service, such as docker, it is important to match your JVM heap size to the container memory limit. Use `-XX:+UseContainerSupport` (which is enabled in Java 15+ by default) so that the JVM reads your container's cgroup memory allocation correctly.
-
-## String Deduplication
+### String Deduplication
 String deduplication is a JVM feature that has been around for quite a while now. It helps reduce Java heap memory usage by automatically deduplicating identical character arrays that are backing String objects. In the case of Minecraft, it can slightly help reduce the heap memory usage. It used to only work with G1GC, but in Java 18 a huge chunk of it was rewritten to also support ZGC. It is also more beneficial to use it with ZGC, because it does the string deduplication concurrently. To enable this feature simply add `-XX:+UseStringDeduplication` to your start-up arguments.
 
-## Enabling Transparent Huge Pages (THP) on Linux
+### Enabling Transparent Huge Pages (THP) on Linux
 Large pages, or sometimes huge pages, is a technique to reduce the pressure on the processors TLB caches. These caches are used to speed up the time to translate virtual addresses to physical memory addresses. 
 
 Configuring ZGC to use large pages will generally yield better performance (in terms of throughput, latency and start up time) and comes with no real disadvantage, except that it is slightly more complicated to setup. Note that not every Linux machine provided by hosting providers will allow the use of Transparent Huge Pages when using ZGC, in which case the process below will not give any benefits.
@@ -82,12 +76,18 @@ Now let’s go over what each of those do:<br>
 
 After you are done the only thing left is adding `-XX:+UseTransparentHugePages` to your start-up arguments. You should also make sure your `-Xms` equals your `-Xmx` value, adding `-XX:-ZUncommit` is not an option.
 
+### Compact Object Headers
+
+Java 25 introduced a new flag, which, when enabled, reduces the size of JVM object headers from between 96 and 128 bits down to 64 bits. This slightly reduces heap size, improves deployment density, and increases data locality. In some cases it's known to reduce memory usage by up to 20%, though in our use case the difference will be less noticeable. Nevertheless, it does not come with any known downsides, and enabling it is as simple as adding `-XX:+UseCompactObjectHeaders` to your start-up arguments.
+
 ## Conclusion
 The ZGC has an excellent “out-of-the-box” experience. The addition of generations makes it even more versatile and a great option for running Minecraft. 
 
-Simply starting the game with Java 21 or above and adding `-Xms{memory}M -Xmx{memory}M -XX:+UseZGC -XX:+ZGenerational -XX:+AlwaysPreTouch -XX:+UseStringDeduplication` to the start-up arguments, where `{memory}` is the amount of RAM in megabytes you would like to allocate, should be the most optimal way of optimizing garbage collection. 
+Simply starting the game with Java 21 or above and adding `-Xms{memory}M -Xmx{memory}M -XX:+UseZGC -XX:+ZGenerational -XX:+AlwaysPreTouch -XX:+UseStringDeduplication` to the start-up arguments, where `{memory}` is the amount of RAM in megabytes you would like to allocate, should be the most optimal way of optimizing garbage collection.
 
-If setting -Xms is not possible then adding `-XX:-ZUncommit` is the next best option. For people running a Linux machine enabling Transparent Huge Pages can also be beneficial.
+When running Java 25 the `-XX:+ZGenerational` argument is not needed anymore and adding `-XX:+UseCompactObjectHeaders` is another possible optimization.
+
+If setting `-Xms` is not possible then adding `-XX:-ZUncommit` is the next best option. For people running a Linux machine enabling Transparent Huge Pages can also be beneficial.
 
 ## Sources
 https://docs.oracle.com/en/java/javase/21/gctuning/z-garbage-collector.html<br>
@@ -96,3 +96,4 @@ https://dataintellect.com/blog/low-latency-java-optimisation-through-garbage-col
 https://netflixtechblog.com/bending-pause-times-to-your-will-with-generational-zgc-256629c9386b<br>
 https://belief-driven-design.com/looking-at-java-21-generational-zgc-e5c1c/<br>
 https://www.baeldung.com/java-21-generational-z-garbage-collector<br>
+https://nipafx.dev/inside-java-newscast-48/<br>
