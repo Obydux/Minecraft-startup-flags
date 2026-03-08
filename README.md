@@ -43,11 +43,16 @@ ZGC has been designed to be adaptive and to require minimal manual configuration
 ###	Setting the maximum heap size
 The most important tuning option for ZGC is setting the maximum heap size, essentially a limit of how much memory the JVM can use. This is done with the `-Xmx={memory}M` where `{memory}` is the amount of RAM you want to allocate to your Minecraft instance in megabytes. Because ZGC is a concurrent collector, you must select a maximum heap size such that the heap can accommodate the live-set of your application and there is enough headroom in the heap to allow allocations to be serviced while the GC is running. This means you should not set the maximum heap size to the entire amount of memory available on your system, or if you are running the server inside Docker, the container memory limit.
 
-### Returning Unused Memory to the OS
+### Preventing uncommits of unused memory
 By default, ZGC uncommits unused memory, returning it to the operating system. This, however, may be undesirable for Minecraft servers because it can have a negative impact on the latency of Java threads. Best way to go about it is by setting your minimum heap size `-Xms` to the same value as your maximum heap size `-Xmx`, which effectively disables this. Some Minecraft server hosting providers make this simply impossible, however. In which case the only other way to achieve similar results is by adding `-XX:-ZUncommit` to your start-up arguments.
 
+### Trimming the native heap
+ZGC does heap multi-mapping, which means it will map the same heap memory in three different locations in the virtual address space. The glibc memory allocator, used by most Linux distributions, isn't clever enough to detect that it's the same memory being mapped multiple times, and so it accounts for each mapping as if it was new/different, inflating the RSS by 3x. This is even more exaggerated with Generational ZGC due to its frequent scans of internal objects to check whether they should be promoted to the old generation, which eventually causes the JVM process to throw an OutOfMemoryError. Fortunately, glibc exports an API to trim the C-heap: malloc_trim(3). Adding the `-XX:TrimNativeHeapInterval=5000` flag to your start-up arguments instructs the JVM to request a trim of the native memory allocator every 5 seconds, returning that memory to the OS.
+
+As mentioned, this only affects GNU/Linux distributions. The flag would also not be required if we allowed memory to be uncommited but for reasons mentioned before it is not what we want.
+
 ### Reducing latency further
-Not only uncommitting but also committing memory has a negative impact on the latency of Java threads. This is why we should also use the `-XX:+AlwaysPreTouch` argument which will cause the JVM to page in memory before the application starts, which can further reduce latency.
+Not only uncommitting but also committing memory has a negative impact on the latency of Java threads. This is why we should also use the `-XX:+AlwaysPreTouch` argument which will cause the JVM to page in memory before the application starts, slightly increasing application startup time but further reducing latency.
 
 ### NUMA support
 ZGC has NUMA support, which means it will try its best to direct Java heap allocations to NUMA-local memory. NUMA stands for Non-Uniform Memory Access and refers to the architecture design used in multi-socket systems. In NUMA systems, memory is divided into multiple memory nodes, with each node associated with a specific processor or socket. Each processor has faster access to its own local memory node compared to accessing remote memory nodes.
@@ -83,7 +88,7 @@ Java 25 introduced a new flag, which, when enabled, reduces the size of JVM obje
 ## Conclusion
 The ZGC has an excellent “out-of-the-box” experience. The addition of generations makes it even more versatile and a great option for running Minecraft. 
 
-Simply starting the game with Java 21 or above and adding `-Xms{memory}M -Xmx{memory}M -XX:+UseZGC -XX:+ZGenerational -XX:+AlwaysPreTouch -XX:+UseStringDeduplication` to the start-up arguments, where `{memory}` is the amount of RAM in megabytes you would like to allocate, should be the most optimal way of optimizing garbage collection.
+Simply starting the game with Java 21 or above and adding `-Xms{memory}M -Xmx{memory}M -XX:+UseZGC -XX:+ZGenerational -XX:+AlwaysPreTouch -XX:+UseStringDeduplication -XX:TrimNativeHeapInterval=5000` to the start-up arguments, where `{memory}` is the amount of RAM in megabytes you would like to allocate, should be the most optimal way of optimizing garbage collection.
 
 When running Java 25 the `-XX:+ZGenerational` argument is not needed anymore and adding `-XX:+UseCompactObjectHeaders` is another possible optimization.
 
@@ -97,3 +102,5 @@ https://netflixtechblog.com/bending-pause-times-to-your-will-with-generational-z
 https://belief-driven-design.com/looking-at-java-21-generational-zgc-e5c1c/<br>
 https://www.baeldung.com/java-21-generational-z-garbage-collector<br>
 https://nipafx.dev/inside-java-newscast-48/<br>
+https://bugs.openjdk.org/browse/JDK-8293114<br>
+https://mail.openjdk.org/pipermail/zgc-dev/2018-November/000540.html<br>
