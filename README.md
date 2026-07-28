@@ -30,9 +30,9 @@ Garbage-First Garbage Collector (G1GC) is a generational garbage collector, and 
 The biggest changes in Java 21 have come to the Z garbage collector. Prior to Java 21, ZGC was only a non-generational garbage collector. This meant that it did not divide the heap into generations so when performing a scan, it analyzed the whole heap, which in return made the resources needed much greater than G1GC. It also ran into an issue where the application could allocate memory faster than the GC could reclaim from dead objects, which in return made Java threads stuck waiting for memory.  This was offset by two solutions, setting a larger heap size (which meant the application was spending more time doing the garbage collection, further reducing throughput) and increasing the number of threads for the garbage collector to make it run faster (which in return is taking threads of the application to use). Neither of these were perfect so in Java 21 work was done to allow ZGC to use generational garbage collection.
 
 ## Using Generational ZGC in Minecraft
-As previously said, Generational ZGC was only added in Java 21. Minecraft requires Java 21 since version 1.20.5, which came out in April 23, 2024. To use Generational ZGC in older Minecraft versions you have to download Java 21 yourself and set it as the default Java runtime for each of your Minecraft client instances you want to use it on, or if you are running a Minecraft server – make it the Java runtime ran in your start-up script. Keep in mind that older Minecraft versions, notably ones before 1.17, may not work as intended with Java 21.
+As previously said, Generational ZGC was only added as an option in Java 21. Minecraft requires Java 21 since version 1.20.5 and since version 26.1 it requires Java 25. To use Generational ZGC in older Minecraft versions you have to download at least Java 21 yourself and set it as the default Java runtime for each of your Minecraft client instances you want to use it on, or if you are running a Minecraft server – make it the Java runtime ran in your start-up script. Keep in mind that older Minecraft versions, notably ones before 1.17, may not work as intended with Java 21.
 
-Enabling Generational ZGC is very straightforward. Just add `-XX:+UseZGC -XX:+ZGenerational` to your Java arguments either in your Minecraft client or your server’s start-up script in between `java` and `-jar`. If you are running Java 23 or above the `XX:+ZGenerational` is not needed anymore because it is on by default.
+Enabling Generational ZGC is very straightforward. If you are running Java 23 or above, which you have to in modern Minecraft versions, you can just add `-XX:+UseZGC` to your Java arguments either in your Minecraft client or your server’s start-up script in between `java` and `-jar`. If you are running Java 21 or 22 the `XX:+ZGenerational` is needed as well because it is not on by default yet.
 
 ### When (and When Not) to use ZGC
 Even though ZGC can technically run on small heaps, it scales best when sufficient CPU parallelism and heap headroom is available. Various community observations and tuning guides note that the best results come on hosts with more than 4 cores and 6-8 GB RAM. Systems that have below 2 GB RAM often see better efficency from G1GC due to lower overhead.
@@ -62,6 +62,10 @@ By default, ZGC enables NUMA support, allowing it to leverage the benefits of NU
 ### String Deduplication
 String deduplication is a JVM feature that has been around for quite a while now. It helps reduce Java heap memory usage by automatically deduplicating identical character arrays that are backing String objects. In the case of Minecraft, it can slightly help reduce the heap memory usage. It used to only work with G1GC, but in Java 18 a huge chunk of it was rewritten to also support ZGC. It is also more beneficial to use it with ZGC, because it does the string deduplication concurrently. To enable this feature simply add `-XX:+UseStringDeduplication` to your start-up arguments.
 
+### Compact Object Headers
+
+Java 25 introduced a new flag, which, when enabled, reduces the size of JVM object headers from between 96 and 128 bits down to 64 bits. This slightly reduces heap size, improves deployment density, and increases data locality. In some cases it's known to reduce memory usage by up to 20%, though in our use case the difference will be less noticeable. Nevertheless, it does not come with any known downsides, and enabling it is as simple as adding `-XX:+UseCompactObjectHeaders` to your start-up arguments. Starting with Java 27 this feature is on by default an the flag is not required anymore.
+
 ### Enabling Transparent Huge Pages (THP) on Linux
 Large pages, or sometimes huge pages, is a technique to reduce the pressure on the processors TLB caches. These caches are used to speed up the time to translate virtual addresses to physical memory addresses. 
 
@@ -81,16 +85,12 @@ Now let’s go over what each of those do:<br>
 
 After you are done the only thing left is adding `-XX:+UseTransparentHugePages` to your start-up arguments. You should also make sure your `-Xms` equals your `-Xmx` value, adding `-XX:-ZUncommit` is not an option.
 
-### Compact Object Headers
-
-Java 25 introduced a new flag, which, when enabled, reduces the size of JVM object headers from between 96 and 128 bits down to 64 bits. This slightly reduces heap size, improves deployment density, and increases data locality. In some cases it's known to reduce memory usage by up to 20%, though in our use case the difference will be less noticeable. Nevertheless, it does not come with any known downsides, and enabling it is as simple as adding `-XX:+UseCompactObjectHeaders` to your start-up arguments.
-
 ## Conclusion
 The ZGC has an excellent “out-of-the-box” experience. The addition of generations makes it even more versatile and a great option for running Minecraft. 
 
-Simply starting the game with Java 21 or above and adding `-Xms{memory}M -Xmx{memory}M -XX:+UseZGC -XX:+ZGenerational -XX:+AlwaysPreTouch -XX:+UseStringDeduplication -XX:TrimNativeHeapInterval=5000` to the start-up arguments, where `{memory}` is the amount of RAM in megabytes you would like to allocate, should be the most optimal way of optimizing garbage collection.
+Simply starting the game with Java 25 or above and adding `-Xms{memory}M -Xmx{memory}M -XX:+UseZGC -XX:+UseStringDeduplication -XX:+UseCompactObjectHeaders -XX:+AlwaysPreTouch -XX:TrimNativeHeapInterval=5000` to the start-up arguments, where `{memory}` is the amount of RAM in megabytes you would like to allocate, should be the most optimal way of optimizing garbage collection.
 
-When running Java 25 the `-XX:+ZGenerational` argument is not needed anymore and adding `-XX:+UseCompactObjectHeaders` is another possible optimization.
+When running Java 21-22 adding the `-XX:+ZGenerational` argument is required to use the Generational mode of ZGC. In Java 21-24 the `-XX:+UseCompactObjectHeaders` argument does not exist and since Java 27 it is on by default.
 
 If setting `-Xms` is not possible then adding `-XX:-ZUncommit` is the next best option. For people running a Linux machine enabling Transparent Huge Pages can also be beneficial.
 
