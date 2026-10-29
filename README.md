@@ -79,7 +79,7 @@ The setup process requires you to have complete root access to your Linux machin
 
 Now let’s go over what each of those do:<br>
 `echo madvise | sudo tee /sys/kernel/mm/transparent_hugepage/enabled` enables madvice mode.<br>
-`echo advise > /sys/kernel/mm/transparent_hugepage/shmem_enabled` enables shmem huge pages for the heap.<br>
+`echo advise | sudo tee /sys/kernel/mm/transparent_hugepage/shmem_enabled` enables shmem huge pages for the heap.<br>
 `echo 1 | sudo tee /sys/kernel/mm/transparent_hugepage/khugepaged/defrag` enables defragmentation of huge pages.<br>
 `echo defer | sudo tee /sys/kernel/mm/transparent_hugepage/defrag` configures THP to defer defragmentation of huge pages.<br>
 
